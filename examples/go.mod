@@ -1,6 +1,6 @@
 module github.com/BrownNPC/thing-system/examples
 
-replace github.com/BrownNPC/thing-system => ../
+// replace github.com/BrownNPC/thing-system => ../
 
 go 1.26
 
