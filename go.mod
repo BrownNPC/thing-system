@@ -2,7 +2,10 @@ module github.com/BrownNPC/thing-system
 
 go 1.25.0
 
-require go.abhg.dev/log/silog v0.2.0
+require (
+	github.com/lmittmann/tint v1.1.3
+	go.abhg.dev/log/silog v0.2.0
+)
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

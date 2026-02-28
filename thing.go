@@ -7,10 +7,10 @@ import (
 	"os"
 	"runtime"
 
-	"go.abhg.dev/log/silog"
+	"github.com/lmittmann/tint"
 )
 
-var logger *slog.Logger = slog.New(silog.NewHandler(os.Stderr, nil))
+var logger *slog.Logger = slog.New(tint.NewHandler(os.Stderr, nil))
 
 type ThingRef struct {
 	idx, generation uint32
@@ -20,7 +20,7 @@ func (ref ThingRef) String() string {
 	if ref == NilRef {
 		return "ThingRef(NIL)"
 	}
-	return fmt.Sprintf("ThingRef(id:%v generation:%v)", ref.idx, ref.generation)
+	return fmt.Sprintf("Thing(%v.%v)", ref.idx, ref.generation)
 }
 
 var NilRef = ThingRef{}
@@ -28,20 +28,23 @@ var NilRef = ThingRef{}
 // Things is responsible for the creation, deletion, and reuse of a Thing.
 type Things[Thing any] struct {
 	maxThings   uint32
+	activeThings uint //number of things that are active
 	things      []Thing // index 0 is nil (zero)
 	used        []bool
 	generations []uint32
+	insideLists map[ThingRef][]*List[Thing]
 }
 
 // NewThings allocates memory for all the Things upfront. It's also responsible for the creation, deletion, and reuse of a Thing
 // Things will not log anything if logger is nil.
-func NewThings[Thing any](maxThings uint) *Things[Thing] {
+func NewThings[Thing any](maxThings uint,_...Thing) *Things[Thing] {
 	maxThings += 1 // thing on index 0 is nil.
 	return &Things[Thing]{
 		maxThings:   uint32(maxThings),
 		things:      make([]Thing, maxThings),
 		used:        make([]bool, maxThings),
 		generations: make([]uint32, maxThings),
+		insideLists: make(map[ThingRef][]*List[Thing]),
 	}
 }
 
@@ -50,16 +53,26 @@ func (things *Things[Thing]) New(thing Thing) ThingRef {
 	ref := things.findEmpty()
 	things.used[ref.idx] = true
 	things.things[ref.idx] = thing
+	things.activeThings++
 	return ref
 }
 
 // Del marks the Thing available for reuse.
 func (things *Things[Thing]) Del(ref ThingRef) {
 	if things.IsActive(ref) {
+		for _, list := range things.insideLists[ref] {
+			// if not already popped
+			if (*list != List[Thing]{}) {
+				list.PopSelf()
+			}
+		}
+		delete(things.insideLists, ref)
+
 		things.used[ref.idx] = false
 		things.generations[ref.idx] += 1
 		// zero it out (set to nil)
 		things.things[ref.idx] = things.things[0]
+		things.activeThings--
 	} else {
 		if logger != nil {
 			logger.Warn("Tried to Delete inactive Thing", "file", getParentCaller(0))
@@ -108,8 +121,13 @@ func (things *Things[Thing]) get(ref ThingRef) *Thing {
 // The pointers should not be stored, only modified.
 func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 	return func(yield func(ThingRef, *Thing) bool) {
+		remaining := things.activeThings
 		for id, used := range things.used {
+			if remaining==0{
+				break
+			}
 			if used {
+	   			remaining--
 				if !yield(
 					ThingRef{idx: uint32(id),
 						generation: things.generations[id]},

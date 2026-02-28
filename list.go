@@ -99,25 +99,27 @@ func (curr *List[Thing]) PopSelf() {
 
 // InsertNext inserts the Thing after the this Thing.
 // It does not do anything if list is empty or uninitialized.
-func (l *List[Thing]) InsertNext(newThingRef ThingRef) {
+func (curr *List[Thing]) InsertNext(newThingRef ThingRef) {
 	if newThingRef == NilRef {
 		if logger != nil {
 			logger.Warn("Tried to insert NilRef into list", "file", getParentCaller(0))
 		}
 	}
-	if l.owner == NilRef {
+	if curr.owner == NilRef {
 		if logger != nil {
 			logger.Warn("Tried to Insert into uninitialized list", "file", getParentCaller(0))
 		}
 	}
-	if l.first == NilRef {
+	if curr.first == NilRef {
 		if logger != nil {
 			logger.Warn("Tried to Insert into empty list", "file", getParentCaller(0))
 		}
 	}
-	newThing := l.getListDataFromThing(newThingRef)
-	curr := l
-	next := l.getListDataFromThing(l.next)
+
+	newThing := curr.getListDataFromThing(newThingRef)
+	// must be popped from list before Thing is deleted.
+	curr.things.insideLists[newThingRef] = append(curr.things.insideLists[newThingRef], newThing)
+	next := curr.getListDataFromThing(curr.next)
 	currThingRef := next.prev
 	// insert
 	newThing.next = curr.next
@@ -126,8 +128,8 @@ func (l *List[Thing]) InsertNext(newThingRef ThingRef) {
 	curr.next = newThingRef
 
 	// check if inserted after last element
-	first := l.getListDataFromThing(l.first)
-	if l.next == l.first { // inserted at end, update circle
+	first := curr.getListDataFromThing(curr.first)
+	if curr.next == curr.first { // inserted at end, update circle
 		first.prev = newThingRef
 	}
 }
@@ -148,8 +150,8 @@ func (curr *List[Thing]) Count() int {
 }
 
 // Init initializes the List. It must be called before adding Things.
-func (curr *List[Thing]) Init(ownerRef ThingRef, things *Things[Thing]) {
-	if ownerRef == NilRef {
+func (curr *List[Thing]) Init(self ThingRef, things *Things[Thing]) {
+	if self == NilRef {
 		return
 	}
 	if curr.owner != NilRef {
@@ -159,9 +161,9 @@ func (curr *List[Thing]) Init(ownerRef ThingRef, things *Things[Thing]) {
 		return
 	}
 	curr.isInitialized = true
-	curr.owner = ownerRef
+	curr.owner = self
 	curr.things = things
-	owner := things.get(ownerRef)
+	owner := things.get(self)
 
 	// compute and store the offset of this List field inside the owner struct
 	curr.offset = uintptr(unsafe.Pointer(curr)) - uintptr(unsafe.Pointer(owner))
@@ -246,7 +248,10 @@ func (curr *List[Thing]) append(newThingRef ThingRef) {
 		logger.Warn("Append to uninitialized list", "file", getParentCaller(1))
 		return
 	}
+	// must be popped from list before deletion
+
 	newThing := curr.getListDataFromThing(newThingRef)
+	curr.things.insideLists[newThingRef] = append(curr.things.insideLists[newThingRef], newThing)
 	newThing.things = curr.things
 	newThing.offset = curr.offset
 	newThing.owner = curr.owner
