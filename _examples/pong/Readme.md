@@ -1,2 +1,2 @@
 # Pong game in 216 semicolons of code.
-![Demo](pong.gif)
+![Demo](pong.mp4)
