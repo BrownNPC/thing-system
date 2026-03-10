@@ -38,6 +38,9 @@ func (curr *List[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 			}
 			return
 		}
+		if curr.first == nilRef {
+			return // empty uninitialized list.
+		}
 		idx := 0
 		current := curr.first
 		for {
@@ -55,13 +58,13 @@ func (curr *List[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 
 // PopSelf removes current Thing from List.
 func (curr *List[Thing]) PopSelf() {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to Pop from uninitialized list", "file", getParentCaller(0))
 		}
 		return
 	}
-	if curr.first == NilRef {
+	if curr.first == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to Pop from empty list", "file", getParentCaller(0))
 		}
@@ -100,17 +103,17 @@ func (curr *List[Thing]) PopSelf() {
 // InsertNext inserts the Thing after the this Thing.
 // It does not do anything if list is empty or uninitialized.
 func (curr *List[Thing]) InsertNext(newThingRef ThingRef) {
-	if newThingRef == NilRef {
+	if newThingRef == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to insert NilRef into list", "file", getParentCaller(0))
 		}
 	}
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to Insert into uninitialized list", "file", getParentCaller(0))
 		}
 	}
-	if curr.first == NilRef {
+	if curr.first == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to Insert into empty list", "file", getParentCaller(0))
 		}
@@ -150,25 +153,25 @@ func (curr *List[Thing]) Count() int {
 }
 
 // Init initializes the List. It must be called before adding Things.
-func (curr *List[Thing]) Init(self ThingRef, things *Things[Thing]) {
-	if self == NilRef {
-		return
+func (curr *List[Thing]) Init(selfRef ThingRef, things *Things[Thing]) (self *Thing) {
+	if !things.IsNotNil(selfRef) {
+		return things.get(nilRef)
 	}
-	if curr.owner != NilRef {
+	if curr.owner != nilRef {
 		if logger != nil {
 			logger.Error("Cannot Initialize a if Thing is already part of this list field. Add a new List field and initialize that instead.", "file", getParentCaller(0))
 		}
-		return
+		return things.get(nilRef)
 	}
 	curr.isInitialized = true
-	curr.owner = self
+	curr.owner = selfRef
 	curr.things = things
-	owner := things.get(self)
+	owner := things.get(selfRef)
 
 	// compute and store the offset of this List field inside the owner struct
 	curr.offset = uintptr(unsafe.Pointer(curr)) - uintptr(unsafe.Pointer(owner))
 
-	// validate offset: the field must fit inside the owner object
+	// validate offset. the field must fit inside the owner object
 	ownerSize := unsafe.Sizeof(*owner)
 	listSize := unsafe.Sizeof(*curr)
 	if curr.offset+listSize > ownerSize {
@@ -178,11 +181,12 @@ func (curr *List[Thing]) Init(self ThingRef, things *Things[Thing]) {
 			return
 		}
 	}
+	return owner
 }
 
 // Owner returns the Owner of the list
 func (curr *List[Thing]) Owner() ThingRef {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to get Owner of uninitialized list", "caller", getParentCaller(0))
 		}
@@ -193,7 +197,7 @@ func (curr *List[Thing]) Owner() ThingRef {
 // First returns the First thing inside the List.
 // Thing is guaranteed to be not nil.
 func (curr *List[Thing]) First() *Thing {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to get First Thing in uninitialized list", "caller", getParentCaller(0))
 		}
@@ -204,7 +208,7 @@ func (curr *List[Thing]) First() *Thing {
 // First returns the Previous thing inside the List.
 // Thing is guaranteed to be not nil.
 func (curr *List[Thing]) Prev() *Thing {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to get Previous Thing in uninitialized list", "caller", getParentCaller(0))
 		}
@@ -215,7 +219,7 @@ func (curr *List[Thing]) Prev() *Thing {
 // First returns the Next thing inside the List.
 // Thing is guaranteed to be not nil.
 func (curr *List[Thing]) Next() *Thing {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to get Next Thing in uninitialized list", "caller", getParentCaller(0))
 		}
@@ -226,7 +230,7 @@ func (curr *List[Thing]) Next() *Thing {
 // First returns the Last thing inside the List.
 // Thing is guaranteed to be not nil.
 func (curr *List[Thing]) Last() *Thing {
-	if curr.owner == NilRef {
+	if curr.owner == nilRef {
 		if logger != nil {
 			logger.Warn("Tried to get Last Thing in uninitialized list", "caller", getParentCaller(0))
 		}
@@ -257,7 +261,7 @@ func (curr *List[Thing]) append(newThingRef ThingRef) {
 	newThing.owner = curr.owner
 
 	// if list was empty
-	if curr.first == NilRef && curr.next == NilRef && curr.prev == NilRef {
+	if curr.first == nilRef && curr.next == nilRef && curr.prev == nilRef {
 		// The only thing in the list. Links to itself.
 		newThing.first = newThingRef
 		newThing.next = newThingRef

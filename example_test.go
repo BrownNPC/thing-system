@@ -7,7 +7,7 @@ import (
 	"time"
 
 	ts "github.com/BrownNPC/thing-system"
-	"go.abhg.dev/log/silog"
+	"github.com/lmittmann/tint"
 )
 
 type Vector2 struct{ X, Y float64 }
@@ -83,9 +83,9 @@ func Example() {
 		// invalidates the Ref, so this Thing can be reused later.
 		// Auto removes ref from Lists (like Plr.Inventory)
 		// NOTE: Deleting while looping is unsafe.
-		defer things.Del(ref) // defer to delete after the loop
+		defer things.Delete(ref) // defer to delete after the loop
 
-		fmt.Printf("Queued %v for deletion. That means it's Active:%v as of now\n", ref.String(), things.IsActive(ref)) // IsActive=true
+		fmt.Printf("Queued %v for deletion. That means it's Active:%v as of now\n", ref.String(), things.IsNotNil(ref)) // IsActive=true
 	}
 	// scary!
 	var thingThatDoesNotExist ts.ThingRef
@@ -104,8 +104,8 @@ func Example() {
 		f, _ := os.Create(time.Now().Format(time.DateTime) + "-log.txt") // create file
 		defer f.Close()                                                  // save it
 		// create slog.Handler
-		handler := silog.NewHandler(f, nil) // same handler that's used internally.
-		ts.SetLogger(slog.New(handler))     // logs to the file instead.
+		handler := tint.NewHandler(f, nil) // same handler that's used internally.
+		ts.SetLogger(slog.New(handler))    // logs to the file instead.
 	}
 
 	// Actually, I wanna log to a JSON file now

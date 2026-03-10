@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"runtime"
+	"sync"
 
 	"github.com/lmittmann/tint"
 )
@@ -17,35 +18,55 @@ type ThingRef struct {
 }
 
 func (ref ThingRef) String() string {
-	if ref == NilRef {
+	if ref == nilRef {
 		return "ThingRef(NIL)"
 	}
 	return fmt.Sprintf("Thing(%v.%v)", ref.idx, ref.generation)
 }
 
-var NilRef = ThingRef{}
+var nilRef = ThingRef{}
 
 // Things is responsible for the creation, deletion, and reuse of a Thing.
+// // nil thing will be defaultStateOptional[0]
 type Things[Thing any] struct {
-	maxThings   uint32
-	activeThings uint //number of things that are active
-	things      []Thing // index 0 is nil (zero)
-	used        []bool
-	generations []uint32
-	insideLists map[ThingRef][]*List[Thing]
+	maxThings    uint32
+	activeThings uint    //number of things that are active
+	things       []Thing // index 0 is nil (zero)
+	used         []bool
+	generations  []uint32
+	insideLists  map[ThingRef][]*List[Thing]
+
+	// []*Thing
+	thingPointerPool sync.Pool
 }
 
-// NewThings allocates memory for all the Things upfront. It's also responsible for the creation, deletion, and reuse of a Thing
+// NewThings allocates memory for all the Things upfront. It's also responsible for the creation, deletion, and reuse of a Thing.
 // Things will not log anything if logger is nil.
-func NewThings[Thing any](maxThings uint,_...Thing) *Things[Thing] {
+//
+// NewThings also supports setting the state for the Nil Thing.
+// This could be useful for adding a "missing texture" for when you dereference a Nil ThingRef.
+// 
+// Usage: 
+//	ts.Newthings[Thing](1024)
+//  OR
+//	ts.Newthings(1024, Thing{}) // same as above
+//	
+//	Set default state for Nil things.
+//	ts.Newthings(1024, Thing{Texture: MyTextureForNilThings})
+func NewThings[Thing any](maxThings uint, nilThingState_OPTIONAL ...Thing) *Things[Thing] {
 	maxThings += 1 // thing on index 0 is nil.
-	return &Things[Thing]{
+	things :=&Things[Thing]{
 		maxThings:   uint32(maxThings),
 		things:      make([]Thing, maxThings),
 		used:        make([]bool, maxThings),
 		generations: make([]uint32, maxThings),
 		insideLists: make(map[ThingRef][]*List[Thing]),
 	}
+	// nil thing will be defaultStateOptional[0]
+	if len(nilThingState_OPTIONAL)>1{
+		things.things[0] = nilThingState_OPTIONAL[0]
+	}
+	return things
 }
 
 // New creates a new Thing and returns the ThingRef
@@ -57,20 +78,27 @@ func (things *Things[Thing]) New(thing Thing) ThingRef {
 	return ref
 }
 
-// Del marks the Thing available for reuse.
-func (things *Things[Thing]) Del(ref ThingRef) {
-	if things.IsActive(ref) {
+// Delete marks the Thing available for reuse.
+func (things *Things[Thing]) Delete(ref ...ThingRef) {
+	for _,ref  := range ref {
+		things.del(ref)
+	}
+}
+
+func (things *Things[Thing]) del(ref ThingRef) {
+	if things.IsNotNil(ref) {
 		for _, list := range things.insideLists[ref] {
 			// if not already popped
 			if (*list != List[Thing]{}) {
 				list.PopSelf()
 			}
 		}
+		// free map memory
 		delete(things.insideLists, ref)
 
 		things.used[ref.idx] = false
 		things.generations[ref.idx] += 1
-		// zero it out (set to nil)
+		// zero it out  = things.things[0](set to nil)
 		things.things[ref.idx] = things.things[0]
 		things.activeThings--
 	} else {
@@ -80,7 +108,7 @@ func (things *Things[Thing]) Del(ref ThingRef) {
 	}
 }
 
-// Get returns a pointer to the Thing behind the ThingRef.
+// Get  =t hings.things[0]returns a pointer to the Thing behind the ThingRef.
 // It is guaranteed to never be nil.
 // You should NEVER store the pointer returned by Get for safety reasons.
 // It's recommended to call Get every time you want to modify a field.
@@ -103,7 +131,7 @@ func (things *Things[Thing]) Get(ref ThingRef) *Thing {
 	if logger != nil {
 		logger.Warn("Derefence of NilRef.", "file", getParentCaller(0))
 	}
-	var z Thing
+	var z Thing = things.things[0]
 	return &z
 }
 
@@ -112,7 +140,7 @@ func (things *Things[Thing]) get(ref ThingRef) *Thing {
 	if things.isNotNil(ref) && things.isAlive(ref) {
 		return &things.things[ref.idx]
 	}
-	var z Thing
+	var z Thing = things.things[0]
 	return &z
 }
 
@@ -123,11 +151,11 @@ func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 	return func(yield func(ThingRef, *Thing) bool) {
 		remaining := things.activeThings
 		for id, used := range things.used {
-			if remaining==0{
+			if remaining == 0 {
 				break
 			}
 			if used {
-	   			remaining--
+				remaining--
 				if !yield(
 					ThingRef{idx: uint32(id),
 						generation: things.generations[id]},
@@ -139,14 +167,42 @@ func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 	}
 }
 
+
+
+// Filter takes in filterFunc.
+// For every thing the filterFunc returns true, it will be collected
+// into the returned slice.
+//
+// It uses sync.Pool to avoid allocating every frame.
+func (things *Things[Thing]) Filter(filterFunc func(t *Thing)bool) []*Thing{
+	var collection []*Thing
+
+	// Get collection from Pool.
+	if coll := things.thingPointerPool.Get(); coll != nil {
+		collection = coll.([]*Thing)
+	}else{
+		collection = make([]*Thing, 0, things.activeThings)
+	}
+	defer things.thingPointerPool.Put(collection)
+	
+
+    // filter things
+	for _, thing := range things.Each() {
+		if filterFunc(thing) {
+			collection = append(collection, thing)
+		}
+	}
+	return collection
+}
+
 // SetLogger sets the logger used for warnings.
 // Passing nil disables the logger.
 func SetLogger(log *slog.Logger) {
 	logger = log
 }
 
-// IsActive returns true if ref is in use.
-func (things *Things[Thing]) IsActive(ref ThingRef) bool {
+// IsNotNil returns true if ref is in use.
+func (things *Things[Thing]) IsNotNil(ref ThingRef) bool {
 	return things.isNotNil(ref) && things.isAlive(ref)
 }
 
@@ -168,13 +224,18 @@ func (things *Things[Thing]) findEmpty() ThingRef {
 	if logger != nil {
 		logger.Error("Ran out of memory, allocate more things in NewThings()", "file", getParentCaller(1))
 	}
-	return NilRef
+	return nilRef
 }
 
 // isAlive checks if a ref is in use and the generation is not old.
 func (things *Things[Thing]) isAlive(ref ThingRef) bool {
 	dead := things.used[ref.idx] == false || ref.generation != things.generations[ref.idx]
 	return !dead
+}
+
+// Returns line number of the function that called current function. useful for logging.
+func GetParentCaller() string {
+	return getParentCaller(1)
 }
 
 // used for loggin

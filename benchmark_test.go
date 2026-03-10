@@ -43,3 +43,11 @@ func BenchmarkLoop10kThingsList(b *testing.B) {
 	}
 	b.Attr("PerElementCost", (b.Elapsed() / time.Duration(b.N) / time.Duration(thingCount)).String())
 }
+func BenchmarkGet(b *testing.B) {
+	things := ts.NewThings(1, Thing{})
+	Plr := things.New(Thing{Kind: KindPlayer})
+
+	for b.Loop() {
+		_ = things.Get(Plr)
+	}
+}
