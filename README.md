@@ -3,11 +3,11 @@
 
 
 ### Features:
-- Null Safety + Memory Safety: Impossible to crash your program by accident
-- Zero Allocations: Things live inside 1 array, allocated upfront
-- Performance: Because zero allocations == "blazingly fast"
-- Logs your mistakes: If you mess something up, your program won't crash, but it'll log exactly where in the code you messed up
-- Customizable Logs: uses the stdlib slog.Logger, you can make it log to a file, to a discord server or disable logs entirely
+- **Null Safety + Memory Safety**: Impossible to crash your program by accident
+- **Zero Allocations**: Things live inside 1 array, allocated upfront
+- **Performance**: Because zero allocations == "blazingly fast"
+- **Logs your mistakes**: If you mess something up, your program won't crash, but it'll log exactly where in the code you messed up
+- **Customizable Logs**: uses the stdlib slog.Logger, you can make it log to a file, to a discord server or disable logs entirely
 
 ### Everything in action:
 
