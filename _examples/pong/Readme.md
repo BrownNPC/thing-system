@@ -1,2 +1,2 @@
 # Pong game in 216 semicolons of code.
-![Demo](pong.mp4)
+https://github.com/BrownNPC/thing-system/raw/refs/heads/master/_examples/pong/pong.mp4
