@@ -248,7 +248,7 @@ func (curr *List[Thing]) getListDataFromThing(thingRef ThingRef) *List[Thing] {
 	return (*List[Thing])(fieldPtr)
 }
 func (curr *List[Thing]) append(newThingRef ThingRef) {
-	if !curr.isInitialized || !curr.things.isNotNil(newThingRef) || !curr.things.isAlive(newThingRef) {
+	if !curr.isInitialized || !curr.things.isInBounds(newThingRef) || !curr.things.isAlive(newThingRef) {
 		logger.Warn("Append to uninitialized list", "file", getParentCaller(1))
 		return
 	}

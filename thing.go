@@ -72,13 +72,16 @@ func NewThings[Thing any](maxThings uint, nilThingState_OPTIONAL ...Thing) *Thin
 // New creates a new Thing and returns the ThingRef
 func (things *Things[Thing]) New(thing Thing) ThingRef {
 	ref := things.findEmpty()
-	things.used[ref.idx] = true
-	things.things[ref.idx] = thing
-	things.activeThings++
+	if ref != nilRef {
+		things.used[ref.idx] = true
+		things.things[ref.idx] = thing
+		things.activeThings++
+	}
 	return ref
 }
 
 // Delete marks the Thing available for reuse.
+// Does not do anything if ref is Nil.
 func (things *Things[Thing]) Delete(ref ...ThingRef) {
 	for _,ref  := range ref {
 		things.del(ref)
@@ -125,7 +128,7 @@ func (things *Things[Thing]) del(ref ThingRef) {
 //	someGlobalVariable.player = things.Get(Plr) // reference stored for later use
 //	someGlobalVariable.player.Health -= 1 // Unsafe
 func (things *Things[Thing]) Get(ref ThingRef) *Thing {
-	if things.isNotNil(ref) && things.isAlive(ref) {
+	if things.IsNotNil(ref){
 		return &things.things[ref.idx]
 	}
 	if logger != nil {
@@ -137,7 +140,7 @@ func (things *Things[Thing]) Get(ref ThingRef) *Thing {
 
 // get is the same as Get but does not trigger a log.
 func (things *Things[Thing]) get(ref ThingRef) *Thing {
-	if things.isNotNil(ref) && things.isAlive(ref) {
+	if things.isInBounds(ref) && things.isAlive(ref) {
 		return &things.things[ref.idx]
 	}
 	var z Thing = things.things[0]
@@ -149,19 +152,15 @@ func (things *Things[Thing]) get(ref ThingRef) *Thing {
 // The pointers should not be stored, only modified.
 func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 	return func(yield func(ThingRef, *Thing) bool) {
-		remaining := things.activeThings
-		for id, used := range things.used {
-			if remaining == 0 {
-				break
-			}
-			if used {
-				remaining--
+		for id :=uint(1); id <things.activeThings;id++{
+			if things.used[id]{
 				if !yield(
 					ThingRef{idx: uint32(id),
 						generation: things.generations[id]},
 					&things.things[id]) {
 					break
 				}
+				
 			}
 		}
 	}
@@ -203,11 +202,11 @@ func SetLogger(log *slog.Logger) {
 
 // IsNotNil returns true if ref is in use.
 func (things *Things[Thing]) IsNotNil(ref ThingRef) bool {
-	return things.isNotNil(ref) && things.isAlive(ref)
+	return things.isInBounds(ref) && things.isAlive(ref)
 }
 
-// isNotNil checks if the ref is a NilRef, or out of bounds.
-func (things *Things[Thing]) isNotNil(ref ThingRef) bool {
+// isInBounds checks if the ref is a NilRef, or out of bounds.
+func (things *Things[Thing]) isInBounds(ref ThingRef) bool {
 	if ref.idx > 0 && ref.idx < things.maxThings {
 		return true
 	}
