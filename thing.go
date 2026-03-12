@@ -152,7 +152,7 @@ func (things *Things[Thing]) get(ref ThingRef) *Thing {
 // The pointers should not be stored, only modified.
 func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 	return func(yield func(ThingRef, *Thing) bool) {
-		for id :=uint(1); id <things.activeThings;id++{
+		for id := uint(1); id <=things.activeThings; id++{
 			if things.used[id]{
 				if !yield(
 					ThingRef{idx: uint32(id),
@@ -160,7 +160,6 @@ func (things *Things[Thing]) Each() iter.Seq2[ThingRef, *Thing] {
 					&things.things[id]) {
 					break
 				}
-				
 			}
 		}
 	}
